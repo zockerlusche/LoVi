@@ -1,0 +1,12 @@
+services:
+  lovi:
+    image: ghcr.io/zockerlusche/lovi:latest
+    container_name: lovi
+    restart: unless-stopped
+    ports:
+      - "8095:5000"
+    volumes:
+      - /opt/docker/logs:/logs          # Zentrales Log-Verzeichnis
+      - /opt/docker/lovi/data:/data     # Datenbank (lovi.db)
+    environment:
+      - TZ=Europe/Berlin
