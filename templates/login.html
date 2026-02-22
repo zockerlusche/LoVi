@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoVi – {{ t.login.title }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+
+    <div class="login-box">
+
+        <div class="login-logo">
+            <span class="logo-lo">Lo</span><span class="logo-vi">Vi</span>
+            <div class="logo-sub">LOG VIEWER</div>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="login-form">
+            <div class="form-group">
+                <label>{{ t.login.username }}</label>
+                <input type="text" name="username" id="username"
+                       autocomplete="username" autofocus>
+            </div>
+            <div class="form-group">
+                <label>{{ t.login.password }}</label>
+                <input type="password" name="password" id="password"
+                       autocomplete="current-password">
+            </div>
+
+            <button class="login-btn" type="submit">{{ t.login.submit }}</button>
+        </div>
+
+        <div class="login-footer">LoVi v0.1 – by Marcel Balda</div>
+    </div>
+
+<script>
+    function doLogin() {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = "/login";
+
+        const u = document.createElement("input");
+        u.name = "username";
+        u.value = document.getElementById("username").value;
+        form.appendChild(u);
+
+        const p = document.createElement("input");
+        p.name = "password";
+        p.value = document.getElementById("password").value;
+        form.appendChild(p);
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    // Enter-Taste
+    document.addEventListener("keydown", e => {
+        if (e.key === "Enter") doLogin();
+    });
+</script>
+
+</body>
+</html>

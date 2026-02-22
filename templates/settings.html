@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="{{ current_lang | default('de') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoVi – {{ t.settings.title }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <header>
+        <div class="logo">
+            <span class="logo-lo">Lo</span><span class="logo-vi">Vi</span>
+            <span class="logo-sub">LOG VIEWER</span>
+        </div>
+        <div class="header-right">
+            <a href="/" class="nav-link">&#9658; {{ t.nav.dashboard }}</a>
+            {% if current_user.is_admin %}
+            <a href="/settings" class="nav-link">&#9881; {{ t.nav.settings }}</a>
+            <a href="/users" class="nav-link">&#128100; {{ t.nav.users }}</a>
+            {% endif %}
+            <span class="nav-user">{{ current_user.username }}</span>
+            <form method="POST" action="/settings/language" style="display:inline">
+                <select name="language" onchange="this.form.submit()" class="lang-select">
+                    <option value="de" {% if current_lang == 'de' %}selected{% endif %}>&#127465;&#127466; DE</option>
+                    <option value="en" {% if current_lang == 'en' %}selected{% endif %}>&#127468;&#127463; EN</option>
+                </select>
+            </form>
+            <a href="/logout" class="nav-link logout">{{ t.nav.logout }}</a>
+            <span class="version">v0.1</span>
+        </div>
+    </header>
+
+    <div class="admin-container" style="max-width:1000px">
+
+        <div class="admin-title">{{ t.settings.title }}</div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <!-- TABS -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('quickstart', this)">&#128640; Quick Start</button>
+            <button class="tab" onclick="showTab('github', this)">{{ t.settings.tab_github }}</button>
+            <button class="tab" onclick="showTab('profiles', this)">{{ t.settings.tab_profiles }}</button>
+            <button class="tab" onclick="showTab('assign', this)">{{ t.settings.tab_assign }}</button>
+            <button class="tab" onclick="showTab('new', this)">{{ t.settings.tab_new }}</button>
+            <button class="tab" onclick="showTab('notifications', this)">&#128276; Notifications</button>
+            <button class="tab" onclick="showTab('backup', this)">&#128190; Backup</button>
+            <button class="tab" onclick="showTab('logfiles', this)">&#128196; Log Files</button>
+        </div>
+
+        <!-- TAB: QUICK START -->
+        <div id="tab-quickstart" class="tab-content active admin-card">
+            <div class="admin-card-title">&#128640; How to add logs to LoVi</div>
+            <div class="qs-tabs">
+                <button class="qs-tab active" onclick="showQs(0, this)">1 · Get Profile</button>
+                <button class="qs-tab" onclick="showQs(1, this)">2 · App Volume</button>
+                <button class="qs-tab" onclick="showQs(2, this)">3 · Recreate</button>
+                <button class="qs-tab" onclick="showQs(3, this)">4 · Done</button>
+                <button class="qs-tab" onclick="showQs(4, this)">5 · Custom Apps</button>
+            </div>
+            <div class="qs-panels">
+                <div class="qs-panel active">
+                    <strong>Get a profile for your app from GitHub</strong><br><br>
+                    LoVi uses profiles to recognize log levels (ERROR, WARN, INFO) and display them in color.<br><br>
+                    Profiles for popular apps are available directly in LoVi:<br><br>
+                    <span class="qs-tip">&#128161; Go to the <strong><a href="#" onclick="document.querySelector('.tab[onclick*='github']').click();return false;">GitHub tab</a></strong>, click <strong>Load Available Profiles</strong>, find your app and click <strong>Install</strong>.</span>
+                    <span class="qs-tip">&#128161; After install, a step-by-step guide appears automatically – it shows you exactly which line to add to your docker-compose.yml.</span>
+                    <span class="qs-tip">&#128161; Available apps include: Radarr, Sonarr, Lidarr, Prowlarr, Jellyfin, SABnzbd, Traefik, Nginx, Home Assistant, Syslog and more.</span>
+                </div>
+                <div class="qs-panel">
+                    <strong>Add a volume mount to the APP's docker-compose.yml</strong><br><br>
+                    The GitHub profile install shows you the exact line to add. The concept:<br><br>
+                    <pre class="qs-code">services:
+  radarr:
+    volumes:
+      - /opt/docker/radarr/config:/config                      # already there
+      - /opt/docker/radarr/config/logs:/opt/docker/logs/radarr # ADD THIS</pre>
+                    The left side is the path on your <strong>host</strong>.<br>
+                    The right side maps into LoVi's central log directory.<br><br>
+                    <span class="qs-tip">&#128161; LoVi's own docker-compose.yml never needs to be changed when adding new apps – it always mounts <code>/opt/docker/logs:/logs</code> once and that's it.</span>
+                </div>
+                <div class="qs-panel">
+                    <strong>Recreate the APP container – NOT just restart!</strong><br><br>
+                    A simple <code>docker restart</code> does <strong>NOT</strong> apply new volume mounts.<br>
+                    You must recreate only the app:
+                    <pre class="qs-code">cd /opt/docker/YOURSTACK
+docker-compose up -d radarr</pre>
+                    <span class="qs-warn">&#9888; This causes ~5 seconds downtime for that container.<br>Your app config and data are NOT affected – only the new mount is added.</span>
+                    <span class="qs-tip">&#128161; LoVi itself does NOT need to be recreated – it already sees the central log directory.</span>
+                </div>
+                <div class="qs-panel">
+                    <strong>That's it – LoVi does the rest automatically!</strong><br><br>
+                    Once the app is recreated and writing logs, LoVi will:<br><br>
+                    ✅ Detect the new log file automatically<br>
+                    ✅ Assign the installed profile automatically<br>
+                    ✅ Show the log as a colored widget on the Dashboard<br><br>
+                    <span class="qs-tip">&#128161; If colors look wrong, use the <strong>Auto-Detect</strong> tab – paste a sample log line and LoVi suggests the best matching profile.</span>
+                    <span class="qs-tip">&#128161; You can also manually assign or change a profile anytime via the <strong>Assign</strong> tab.</span>
+                </div>
+                <div class="qs-panel">
+                    <strong>App not in the GitHub list?</strong><br><br>
+                    No problem – you can create a custom profile:<br><br>
+                    1. Go to <strong>Auto-Detect</strong> – paste a sample log line to find the right keywords<br>
+                    2. Go to <strong>+ New Profile</strong> – create your own profile with custom level keywords<br>
+                    3. Go to <strong>Assign</strong> – manually assign the profile to the log file<br><br>
+                    <span class="qs-tip">&#128161; Not sure where your app's log file is? Run:<br>
+                    <code>docker exec CONTAINERNAME find /config -name "*.log" 2>/dev/null</code></span>
+                    <span class="qs-tip">&#128161; Want to contribute your profile? Submit a pull request to <code>zockerlusche/lovi-profiles</code> on GitHub!</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: NOTIFICATIONS -->
+        <div id="tab-notifications" class="tab-content admin-card" style="display:none">
+            <div class="admin-card-title">&#128276; Email Notifications</div>
+
+            <!-- Provider Hinweise -->
+            <div style="background:var(--bg-dark);border-left:3px solid var(--accent);padding:12px 16px;border-radius:0 4px 4px 0;font-size:12px;margin-bottom:20px">
+                &#128161; <strong>Gmail:</strong> Use your Gmail address as SMTP user and create an <strong>App Password</strong> (not your normal password).<br>
+                Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--accent)">myaccount.google.com/apppasswords</a> → create a new app password and paste it into the password field below.
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px;max-width:560px">
+
+                <!-- Enable Toggle -->
+                <div class="form-group" style="display:flex;align-items:center;gap:12px">
+                    <input type="checkbox" id="notif-enabled" style="width:18px;height:18px;cursor:pointer">
+                    <label for="notif-enabled" style="cursor:pointer;font-weight:600">Enable email notifications</label>
+                </div>
+
+                <!-- Provider Preset -->
+                <div class="form-group">
+                    <label>Quick setup (fills SMTP settings)</label>
+                    <select id="notif-preset" onchange="applyPreset()" class="form-control">
+                        <option value="">– Select provider –</option>
+                        <option value="gmail">Gmail (App Password)</option>
+                        <option value="custom">Custom SMTP</option>
+                    </select>
+                </div>
+
+                <!-- SMTP Settings -->
+                <div style="display:grid;grid-template-columns:1fr 120px;gap:12px">
+                    <div class="form-group">
+                        <label>SMTP Host</label>
+                        <input type="text" id="notif-host" class="form-control" placeholder="e.g. smtp.gmail.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Port</label>
+                        <input type="number" id="notif-port" class="form-control" value="587">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>SMTP Username</label>
+                    <input type="text" id="notif-user" class="form-control" placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label>SMTP Password / API Key</label>
+                    <input type="password" id="notif-pass" class="form-control" placeholder="leave empty to keep existing">
+                </div>
+                <div class="form-group">
+                    <label>From address</label>
+                    <input type="text" id="notif-from" class="form-control" placeholder="lovi@yourdomain.com">
+                </div>
+                <div class="form-group">
+                    <label>Send alerts to</label>
+                    <input type="text" id="notif-to" class="form-control" placeholder="you@yourdomain.com">
+                </div>
+
+                <!-- Threshold -->
+                <div style="background:var(--bg-dark);border:1px solid var(--border);border-radius:6px;padding:16px">
+                    <div style="font-weight:600;margin-bottom:12px">&#9888; Alert threshold</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                        <div class="form-group">
+                            <label>Min. ERRORs</label>
+                            <input type="number" id="notif-count" class="form-control" value="5" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>within (minutes)</label>
+                            <input type="number" id="notif-mins" class="form-control" value="10" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Cooldown (minutes)</label>
+                            <input type="number" id="notif-cooldown" class="form-control" value="30" min="1">
+                        </div>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
+                        Send alert when a log file has at least <strong id="preview-count">5</strong> ERRORs within <strong id="preview-mins">10</strong> minutes. Wait <strong id="preview-cooldown">30</strong> minutes before sending another alert for the same file.
+                    </div>
+                </div>
+
+                <!-- Buttons -->
+                <div style="display:flex;gap:12px">
+                    <button class="login-btn" style="width:auto;padding:8px 20px" onclick="saveNotifications()">&#128190; Save</button>
+                    <button class="btn-info" style="padding:8px 20px" onclick="testNotifications()">&#9993; Send Test Mail</button>
+                </div>
+                <div id="notif-status" style="font-size:12px;display:none"></div>
+            </div>
+        </div>
+
+        <!-- TAB: BACKUP -->
+        <div id="tab-backup" class="tab-content admin-card" style="display:none">
+            <div class="admin-card-title">&#128190; Backup &amp; Restore</div>
+
+            <!-- Export -->
+            <div style="margin-bottom:32px">
+                <div style="font-weight:600;font-size:14px;margin-bottom:8px">&#128229; Export</div>
+                <div style="background:var(--bg-dark);border-left:3px solid var(--ok);padding:12px 16px;border-radius:0 4px 4px 0;font-size:12px;margin-bottom:12px;color:var(--text-muted)">
+                    Downloads a ZIP file containing the complete database – including all profiles, assignments, users and notification settings.
+                </div>
+                <a href="/api/backup/export" class="login-btn" style="display:inline-block;width:auto;padding:8px 20px;text-decoration:none">
+                    &#128229; Download Backup
+                </a>
+            </div>
+
+            <!-- Import -->
+            <div>
+                <div style="font-weight:600;font-size:14px;margin-bottom:8px">&#128228; Restore</div>
+                <div style="background:var(--bg-dark);border-left:3px solid var(--warn);padding:12px 16px;border-radius:0 4px 4px 0;font-size:12px;margin-bottom:12px;color:var(--text-muted)">
+                    &#9888; <strong>Warning:</strong> Restoring a backup will overwrite all current data. The current database will be saved as <code>lovi.db.bak</code> before restore.<br><br>After restore, restart LoVi to apply changes:<br><code style="color:#7ec8e3">docker restart lovi</code>
+                </div>
+                <div style="display:flex;gap:12px;align-items:center">
+                    <input type="file" id="backup-file" accept=".zip" style="font-size:13px;color:var(--text)">
+                    <button class="btn-danger" onclick="restoreBackup()" style="padding:8px 20px;white-space:nowrap">
+                        &#128228; Restore Backup
+                    </button>
+                </div>
+                <div id="backup-status" style="margin-top:12px;font-size:12px;display:none"></div>
+            </div>
+        </div>
+
+        <!-- TAB: LOG FILES -->
+        <div id="tab-logfiles" class="tab-content admin-card" style="display:none; padding:0; overflow:hidden">
+
+            <!-- STICKY HEADER – immer sichtbar -->
+            <div style="padding:16px 24px 12px; border-bottom:1px solid var(--border); background:var(--bg-panel); flex-shrink:0">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                    <span class="admin-card-title" style="border:none;padding:0;margin:0">&#128196; Log File Management</span>
+
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+    <form method="POST" action="/settings/logfiles/show-all"
+          onsubmit="return confirm('Show all hidden log files?')">
+        <button class="btn-info" style="border-color:var(--info);color:var(--info)">
+            👁 Show all hidden
+        </button>
+    </form>
+    <form method="POST" action="/settings/logfiles/hide-rotating"
+          onsubmit="return confirm('Hide all rotating/backup logs (*.0.txt, *.1.txt …)?')">
+        <button class="btn-danger" style="border-color:var(--warn);color:var(--warn)">
+            🚫 Hide all rotating logs
+        </button>
+    </form>
+</div>
+
+                </div>
+                <div style="font-size:12px;color:var(--text-muted);padding:8px 12px;background:var(--bg-dark);border-left:3px solid var(--accent);border-radius:0 4px 4px 0">
+                    Hidden files are removed from the Dashboard and search. Rotating logs (e.g. <code>radarr.debug.0.txt</code>) are auto-detected and can be bulk-hidden.
+                </div>
+            </div>
+
+            <!-- SCROLLBARE TABELLE -->
+            <div style="overflow-y:auto; max-height:calc(100vh - 320px); padding:0 24px 24px">
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for f in files_meta %}
+                    <tr style="{% if f.hidden %}opacity:0.45{% endif %}">
+                        <td style="font-family:var(--font-mono);font-size:12px;color:var(--text)">
+                            {{ f.filename }}
+                        </td>
+                        <td>
+                            {% if f.rotating %}
+                            <span class="badge" style="color:var(--warn);border-color:var(--warn)">rotating</span>
+                            {% else %}
+                            <span class="badge badge-user">normal</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if f.hidden %}
+                            <span class="badge" style="color:var(--text-muted);border-color:var(--border)">hidden</span>
+                            {% else %}
+                            <span class="badge badge-admin">visible</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form method="POST" action="/settings/logfiles/hide" style="display:inline">
+                                <input type="hidden" name="filename" value="{{ f.filename }}">
+                                {% if f.hidden %}
+                                <input type="hidden" name="action" value="show">
+                                <button class="btn-info" style="font-size:11px;padding:3px 8px">&#128065; Show</button>
+                                {% else %}
+                                <input type="hidden" name="action" value="hide">
+                                <button class="btn-danger" style="font-size:11px;padding:3px 8px">&#128683; Hide</button>
+                                {% endif %}
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="muted" style="text-align:center;padding:24px">
+                            No log files found. Mount a <code>/logs</code> volume first.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+
+        <!-- TAB: PROFILE LISTE -->
+        <div id="tab-profiles" class="tab-content admin-card" style="display:none">
+            <div class="admin-card-title">{{ t.settings.profiles_title }}</div>
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>{{ t.settings.col_name }}</th>
+                        <th>{{ t.settings.col_desc }}</th>
+                        <th>{{ t.settings.col_source }}</th>
+                        <th>{{ t.settings.col_version }}</th>
+                        <th>{{ t.settings.col_help }}</th>
+                        <th>{{ t.settings.col_action }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for p in profiles %}
+                <tr>
+                    <td><strong>{{ p.name }}</strong></td>
+                    <td class="muted" style="font-size:12px">{{ p.description }}</td>
+                    <td>
+                        {% if p.source == 'builtin' %}
+                        <span class="badge badge-admin">{{ t.settings.builtin }}</span>
+                        {% elif p.source == 'github' %}
+                        <span class="badge" style="color:#f0883e;border-color:#f0883e">GitHub</span>
+                        {% else %}
+                        <span class="badge badge-user">{{ t.settings.local }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="muted">{{ p.version }}</td>
+                    <td>
+                        {% if p.help_setup %}
+                        <button class="btn-info" onclick="showHelp('{{ p.name }}', `{{ p.help_setup | replace('`', "'") }}`, `{{ p.help_mount | replace('`', "'") }}`, `{{ p.log_path_hint | replace('`', "'") }}`)">
+                            {{ t.settings.info_btn }}
+                        </button>
+                        {% else %}
+                        <span class="muted">&#8211;</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.source != 'builtin' %}
+                        <form method="POST" action="/settings/profile/delete/{{ p.id }}"
+                              onsubmit="return confirm('{{ t.settings.delete_confirm }}')">
+                            <button class="btn-danger">{{ t.settings.delete_btn }}</button>
+                        </form>
+                        {% else %}
+                        <span class="muted">&#8211;</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- TAB: ZUWEISEN -->
+        <div id="tab-assign" class="tab-content admin-card" style="display:none">
+            <div class="admin-card-title">{{ t.settings.assign_title }}</div>
+            <div class="add-user-form">
+                <div class="form-group">
+                    <label>{{ t.settings.assign_file }}</label>
+                    <select id="assign-file">
+                        {% for f in log_files %}
+                        <option value="{{ f }}">{{ f }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>{{ t.settings.assign_label }}</label>
+                    <input type="text" id="assign-label"
+                           placeholder="{{ t.settings.assign_label_hint }}">
+                </div>
+                <div class="form-group">
+                    <label>{{ t.settings.assign_profile }}</label>
+                    <select id="assign-profile">
+                        {% for p in profiles %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button class="login-btn" onclick="saveAssign()">
+                    {{ t.settings.assign_submit }}
+                </button>
+            </div>
+
+            {% if assignments %}
+            <div style="margin-top:24px">
+                <div class="admin-card-title" style="margin-bottom:12px">
+                    {{ t.settings.assign_current }}
+                </div>
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>{{ t.settings.assign_file }}</th>
+                            <th>{{ t.settings.assign_label }}</th>
+                            <th>{{ t.settings.assign_profile }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for a in assignments %}
+                    <tr>
+                        <td class="muted" style="font-family:var(--font-mono);font-size:12px">
+                            {{ a.filename }}
+                        </td>
+                        <td>{{ a.label or '&#8211;' }}</td>
+                        <td><span class="badge badge-user">{{ a.profile_name }}</span></td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- TAB: NEUES PROFIL -->
+        <div id="tab-new" class="tab-content admin-card" style="display:none">
+            <div class="admin-card-title">{{ t.settings.new_title }}</div>
+            <div class="add-user-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>{{ t.settings.new_name }}</label>
+                        <input type="text" id="new-name"
+                               placeholder="{{ t.settings.new_name_hint }}">
+                    </div>
+                    <div class="form-group">
+                        <label>{{ t.settings.new_desc }}</label>
+                        <input type="text" id="new-desc"
+                               placeholder="{{ t.settings.new_desc_hint }}">
+                    </div>
+                </div>
+                <div class="form-hint">{{ t.settings.new_keywords_hint }}</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>{{ t.settings.new_error }}</label>
+                        <input type="text" id="new-error" value="ERROR,CRITICAL">
+                    </div>
+                    <div class="form-group">
+                        <label>{{ t.settings.new_warn }}</label>
+                        <input type="text" id="new-warn" value="WARN,WARNING">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>{{ t.settings.new_info }}</label>
+                        <input type="text" id="new-info" value="INFO">
+                    </div>
+                    <div class="form-group">
+                        <label>{{ t.settings.new_debug }}</label>
+                        <input type="text" id="new-debug" value="DEBUG">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>{{ t.settings.new_path }}</label>
+                    <input type="text" id="new-path" placeholder="/config/logs/app.log">
+                </div>
+                <div class="form-group">
+                    <label>{{ t.settings.new_setup }}</label>
+                    <input type="text" id="new-setup"
+                           placeholder="e.g. Settings -> Log Level -> Info">
+                </div>
+                <div class="form-group">
+                    <label>{{ t.settings.new_mount }}</label>
+                    <input type="text" id="new-mount"
+                           placeholder="-v /config/logs:/logs/app">
+                </div>
+                <button class="login-btn" onclick="saveProfile()">
+                    {{ t.settings.new_submit }}
+                </button>
+            </div>
+        </div>
+
+
+
+        <!-- TAB: GITHUB -->
+        <div id="tab-github" class="tab-content admin-card" style="display:none; padding:0; overflow:hidden">
+            <div id="github-header" style="padding:16px 24px 12px; border-bottom:1px solid var(--border); background:var(--bg-panel)">
+                <div class="admin-card-title" style="border:none;padding:0;margin-bottom:8px">{{ t.settings.github_title }}</div>
+                <div class="github-hint">
+                    {{ t.settings.github_hint }}
+                    <code>{{ github_user }}/{{ github_repo }}</code>
+                </div>
+                <button class="login-btn" style="width:auto;padding:8px 20px;margin-top:12px"
+                        onclick="loadGithubProfiles()">
+                    {{ t.settings.github_load }}
+                </button>
+            </div>
+            <div id="github-list" style="overflow-y:auto; padding:16px 24px 24px">
+                <div class="muted" style="font-size:13px">
+                    {{ t.settings.github_load }}
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /admin-container -->
+
+    <!-- WAS NUN MODAL -->
+    <div class="modal-overlay" id="whatnow-modal">
+        <div class="modal-box" style="max-width:680px;height:auto;max-height:90vh;border:1px solid var(--accent)">
+            <div class="modal-header" style="background:linear-gradient(90deg,#0d2137,#0a3d62);border-bottom:2px solid var(--accent)">
+                <div class="modal-title" id="whatnow-title" style="font-size:16px;color:#fff">✅ Installed</div>
+                <button onclick="closeWhatNow()" style="color:#fff">✕</button>
+            </div>
+            <div style="padding:24px;overflow-y:auto;display:flex;flex-direction:column;gap:20px">
+                <div style="background:linear-gradient(90deg,#0a2e1a,#0d3b22);border:1px solid var(--ok);border-radius:6px;padding:14px 18px;font-size:13px;color:#4caf87;display:flex;align-items:center;gap:10px">
+                    <span style="font-size:22px">🎉</span>
+                    <span><strong>Profile installed!</strong><br>
+                    <span style="color:var(--text-muted);font-size:12px">Follow the steps below to connect your app logs to LoVi.</span></span>
+                </div>
+                <div id="whatnow-setup-box">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                        <span style="background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;flex-shrink:0">1</span>
+                        <span style="font-weight:600;font-size:13px">⚙ Enable logging in the app</span>
+                    </div>
+                    <pre id="whatnow-setup" style="white-space:pre-wrap;font-size:12px;background:var(--bg-dark);border:1px solid var(--border);padding:14px;border-radius:4px;margin:0;color:var(--text-muted)"></pre>
+                </div>
+                <div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                        <span style="background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;flex-shrink:0">2</span>
+                        <span style="font-weight:600;font-size:13px">🐳 Add volume mount to your docker-compose.yml</span>
+                    </div>
+                    <pre id="whatnow-mount" style="white-space:pre-wrap;font-size:12px;background:var(--bg-dark);border:1px solid var(--accent);padding:14px;border-radius:4px;margin:0;color:#7ec8e3"></pre>
+                    <button class="btn-info" style="margin-top:8px;font-size:11px;padding:5px 14px"
+                            onclick="navigator.clipboard.writeText(document.getElementById('whatnow-mount').textContent).then(()=>this.textContent='✓ Copied!')">
+                        📋 Copy to clipboard
+                    </button>
+                </div>
+                <div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                        <span style="background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;flex-shrink:0">3</span>
+                        <span style="font-weight:600;font-size:13px">🔄 Recreate the container</span>
+                    </div>
+                    <div style="background:var(--bg-dark);border-left:3px solid var(--warn);padding:12px 16px;border-radius:0 4px 4px 0;font-size:12px;color:var(--text-muted)">
+                        ⚠ A simple <code>docker restart</code> is NOT enough – you must recreate:<br><br>
+                        <code style="color:#7ec8e3">docker-compose up -d APPNAME</code><br><br>
+                        Causes ~5s downtime. Your config and data are NOT affected.
+                    </div>
+                </div>
+                <div style="background:linear-gradient(90deg,#0d1f37,#0a2a50);border:1px solid var(--accent);border-radius:6px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+                    <div>
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                            <span style="background:var(--accent);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;flex-shrink:0">4</span>
+                            <span style="font-weight:600;font-size:13px">Assign log file to this profile</span>
+                        </div>
+                        <span style="font-size:12px;color:var(--text-muted)">Go to Assign tab, select the log file and choose the installed profile.</span>
+                    </div>
+                    <button class="login-btn" onclick="goToAssign()" style="width:auto;padding:8px 20px;white-space:nowrap;flex-shrink:0">
+                        → Assign Tab
+                    </button>
+                </div>
+                <div style="display:flex;justify-content:flex-end">
+                    <button class="btn-secondary" onclick="closeWhatNow()" style="padding:8px 20px">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- HILFE MODAL -->
+    <div class="modal-overlay" id="help-modal" onclick="closeHelp(event)">
+        <div class="modal-box" style="max-width:660px;height:auto;max-height:85vh">
+            <div class="modal-header">
+                <div class="modal-title" id="help-title">&#8211;</div>
+                <button onclick="document.getElementById('help-modal').classList.remove('open')">
+                    {{ t.settings.help_close }}
+                </button>
+            </div>
+            <div style="padding:24px;overflow-y:auto;display:flex;flex-direction:column;gap:16px">
+                <div id="help-path-box" class="help-box" style="display:none">
+                    <div class="help-box-title">{{ t.settings.help_path }}</div>
+                    <code id="help-path"></code>
+                </div>
+                <div id="help-setup-box" class="help-box" style="display:none">
+                    <div class="help-box-title">{{ t.settings.help_setup }}</div>
+                    <pre id="help-setup-text" class="help-pre"></pre>
+                </div>
+                <div id="help-mount-box" class="help-box" style="display:none">
+                    <div class="help-box-title">{{ t.settings.help_mount }}</div>
+                    <pre id="help-mount-text" style="white-space:pre-wrap;font-size:12px;background:var(--bg-dark);border:1px solid var(--accent);padding:14px;border-radius:4px;margin:0;color:#7ec8e3"></pre>
+                    <button class="btn-info" style="margin-top:8px;font-size:11px;padding:5px 14px"
+                            onclick="navigator.clipboard.writeText(document.getElementById('help-mount-text').textContent).then(()=>this.textContent='✓ Copied!').catch(()=>{})">
+                        📋 Copy to clipboard
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const T = {
+        detect_found:    "{{ t.settings.detect_found }}",
+        detect_score:    "{{ t.settings.detect_score }}",
+        detect_matches:  "{{ t.settings.detect_matches }}",
+        detect_none:     "{{ t.settings.detect_none }}",
+        detect_none_hint:"{{ t.settings.detect_none_hint }}",
+        detect_empty:    "{{ t.settings.detect_empty }}",
+        github_loading:  "{{ t.settings.github_loading }}",
+        github_install:  "{{ t.settings.github_install }}",
+        github_confirm:  "{{ t.settings.github_install_confirm }}",
+        github_installed:"{{ t.settings.github_installed }}",
+        github_error:    "{{ t.settings.github_error }}",
+        github_no_prof:  "{{ t.settings.github_no_profiles }}",
+        github_no_inet:  "{{ t.settings.github_no_internet }}",
+        new_required:    "{{ t.settings.new_name_required }}"
+    };
+
+    // Tab-Wechsel über URL-Hash ermöglichen (z.B. nach Redirect #logfiles)
+    function showTab(name, el) {
+        document.querySelectorAll(".tab-content").forEach(t => t.style.display = "none");
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        const tabEl = document.getElementById("tab-" + name);
+        tabEl.style.display = (name === "github") ? "flex" : "block";
+        tabEl.style.flexDirection = "column";
+        if (el) el.classList.add("active");
+        history.replaceState(null, "", "#" + name);
+        if (name === "github") resizeGithubList();
+        if (name === "notifications") loadNotifications();
+    }
+
+    // Beim Laden Hash prüfen
+    const PRESETS = {
+        gmail:  { host: "smtp.gmail.com", port: 587 },
+        custom: { host: "",               port: 587 }
+    };
+    function applyPreset() {
+        const p = PRESETS[document.getElementById("notif-preset").value];
+        if (!p) return;
+        document.getElementById("notif-host").value = p.host;
+        document.getElementById("notif-port").value = p.port;
+    }
+    window.addEventListener("DOMContentLoaded", () => {
+        const hash = window.location.hash.replace("#", "");
+        const validTabs = ["quickstart","github","profiles","assign","new","notifications","backup","logfiles"];
+
+        if (hash && validTabs.includes(hash)) {
+            const btn = document.querySelector(`.tab[onclick*="'${hash}'"]`);
+            if (btn) btn.click();
+        }
+    });
+
+    function updatePreview() {
+        document.getElementById("preview-count").textContent    = document.getElementById("notif-count").value;
+        document.getElementById("preview-mins").textContent     = document.getElementById("notif-mins").value;
+        document.getElementById("preview-cooldown").textContent = document.getElementById("notif-cooldown").value;
+    }
+    ["notif-count","notif-mins","notif-cooldown"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("input", updatePreview);
+    });
+
+    function loadNotifications() {
+        fetch("/api/notifications/settings")
+        .then(r => r.json())
+        .then(d => {
+            if (!d.id) return;
+            document.getElementById("notif-enabled").checked = !!d.enabled;
+            document.getElementById("notif-host").value      = d.smtp_host || "";
+            document.getElementById("notif-port").value      = d.smtp_port || 587;
+            document.getElementById("notif-user").value      = d.smtp_user || "";
+            document.getElementById("notif-from").value      = d.smtp_from || "";
+            document.getElementById("notif-to").value        = d.smtp_to   || "";
+            document.getElementById("notif-count").value     = d.threshold_count || 5;
+            document.getElementById("notif-mins").value      = d.threshold_mins  || 10;
+            document.getElementById("notif-cooldown").value  = d.cooldown_mins   || 30;
+            updatePreview();
+        });
+    }
+
+    function saveNotifications() {
+        const data = {
+            enabled:         document.getElementById("notif-enabled").checked,
+            smtp_host:       document.getElementById("notif-host").value,
+            smtp_port:       parseInt(document.getElementById("notif-port").value),
+            smtp_user:       document.getElementById("notif-user").value,
+            smtp_pass:       document.getElementById("notif-pass").value,
+            smtp_from:       document.getElementById("notif-from").value,
+            smtp_to:         document.getElementById("notif-to").value,
+            threshold_count: parseInt(document.getElementById("notif-count").value),
+            threshold_mins:  parseInt(document.getElementById("notif-mins").value),
+            cooldown_mins:   parseInt(document.getElementById("notif-cooldown").value)
+        };
+        const status = document.getElementById("notif-status");
+        fetch("/api/notifications/settings", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(data)
+        })
+        .then(r => r.json())
+        .then(d => {
+            status.style.display = "block";
+            status.style.color = d.success ? "var(--ok)" : "var(--error)";
+            status.textContent = d.success ? "✓ Settings saved!" : "✗ " + d.error;
+        });
+    }
+
+    function testNotifications() {
+        const status = document.getElementById("notif-status");
+        status.style.display = "block";
+        status.style.color = "var(--text-muted)";
+        status.textContent = "Sending test mail…";
+        fetch("/api/notifications/test", { method: "POST" })
+        .then(r => r.json())
+        .then(d => {
+            status.style.color = d.success ? "var(--ok)" : "var(--error)";
+            status.textContent = d.success ? "✓ Test mail sent!" : "✗ " + d.error;
+        });
+    }
+
+
+
+    function restoreBackup() {
+        const file = document.getElementById("backup-file").files[0];
+        const status = document.getElementById("backup-status");
+        if (!file) { alert("Please select a backup ZIP file!"); return; }
+        if (!confirm("⚠ This will overwrite ALL current data. Are you sure?")) return;
+        const formData = new FormData();
+        formData.append("backup", file);
+        status.style.display = "block";
+        status.style.color = "var(--text-muted)";
+        status.textContent = "Uploading and restoring...";
+        fetch("/api/backup/import", { method: "POST", body: formData })
+        .then(r => r.json())
+        .then(d => {
+            if (d.success) {
+                status.style.color = "var(--ok)";
+                status.textContent = "✓ Restored successfully! Please restart LoVi to apply changes.";
+            } else {
+                status.style.color = "var(--error)";
+                status.textContent = "✗ " + d.error;
+            }
+        });
+    }
+
+    function resizeGithubList() {
+        const header = document.getElementById("github-header");
+        const list = document.getElementById("github-list");
+        if (!header || !list) return;
+        const tabBar = document.querySelector(".tab-bar") || document.querySelector(".settings-tabs");
+        const tabBarH = tabBar ? tabBar.offsetHeight : 50;
+        const headerH = header.offsetHeight;
+        const navH = 56;
+        list.style.maxHeight = (window.innerHeight - navH - tabBarH - headerH - 20) + "px";
+    }
+    window.addEventListener("resize", resizeGithubList);
+
+    function saveAssign() {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = "/settings/assign";
+        [
+            ["filename",   document.getElementById("assign-file").value],
+            ["profile_id", document.getElementById("assign-profile").value],
+            ["label",      document.getElementById("assign-label").value],
+        ].forEach(([n, v]) => {
+            const i = document.createElement("input");
+            i.name = n; i.value = v;
+            form.appendChild(i);
+        });
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    function saveProfile() {
+        const name = document.getElementById("new-name").value.trim();
+        if (!name) { alert(T.new_required); return; }
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = "/settings/profile/add";
+        [
+            ["name",          name],
+            ["description",   document.getElementById("new-desc").value],
+            ["level_error",   document.getElementById("new-error").value],
+            ["level_warn",    document.getElementById("new-warn").value],
+            ["level_info",    document.getElementById("new-info").value],
+            ["level_debug",   document.getElementById("new-debug").value],
+            ["log_path_hint", document.getElementById("new-path").value],
+            ["help_setup",    document.getElementById("new-setup").value],
+            ["help_mount",    document.getElementById("new-mount").value],
+        ].forEach(([n, v]) => {
+            const i = document.createElement("input");
+            i.name = n; i.value = v;
+            form.appendChild(i);
+        });
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    function detectProfile() {
+        const sample = document.getElementById("detect-sample").value.trim();
+        if (!sample) { alert(T.detect_empty); return; }
+        fetch("/api/profile/detect", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({sample})
+        })
+        .then(r => r.json())
+        .then(data => {
+            const box = document.getElementById("detect-result");
+            box.style.display = "block";
+            if (data.match) {
+                box.className = "detect-box detect-success";
+                box.innerHTML = `
+                    <div class="detect-title">${T.detect_found}</div>
+                    <div><strong>${data.match.name}</strong> – ${data.match.description}</div>
+                    <div class="muted" style="font-size:11px;margin-top:4px">
+                        ${T.detect_score}: ${data.score} ${T.detect_matches}
+                    </div>`;
+            } else {
+                box.className = "detect-box detect-fail";
+                box.innerHTML = `
+                    <div class="detect-title">${T.detect_none}</div>
+                    <div class="muted">${T.detect_none_hint}</div>`;
+            }
+        });
+    }
+
+    function loadGithubProfiles() {
+        const list = document.getElementById("github-list");
+        list.innerHTML = `<div class="muted">${T.github_loading}</div>`;
+        fetch("/api/github/profiles")
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                list.innerHTML = `
+                    <div class="detect-box detect-fail">
+                        &#9888; ${T.github_error}: ${data.error}<br>
+                        <span class="muted" style="font-size:11px">${T.github_no_inet}</span>
+                    </div>`;
+                return;
+            }
+            if (!data.profiles || data.profiles.length === 0) {
+                list.innerHTML = `<div class="muted">${T.github_no_prof}</div>`;
+                return;
+            }
+            list.innerHTML = data.profiles.map(p => `
+                <div class="github-profile-card">
+                    <div class="github-profile-info">
+                        <strong>${p.name}</strong>
+                        <span class="muted" style="font-size:12px">${p.description || ''}</span>
+                        <span class="muted" style="font-size:11px">
+                            by ${p.author || 'community'} – v${p.version || '1.0'}
+                        </span>
+                    </div>
+                    <button class="login-btn"
+                            style="width:auto;padding:6px 16px;font-size:12px"
+                            onclick="installProfile('${p.url}', '${p.name}')">
+                        ${T.github_install}
+                    </button>
+                </div>`).join("");
+        });
+    }
+
+    function installProfile(url, name) {
+        if (!confirm(`${T.github_confirm} "${name}"?`)) return;
+        fetch("/api/github/install", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({url})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showWhatNow(data.name, data.help_mount, data.help_setup);
+            } else {
+                alert(`&#9888; ${data.error}`);
+            }
+        });
+    }
+
+    function showWhatNow(name, help_mount, help_setup) {
+        document.getElementById("whatnow-title").textContent = "✅ " + name + " installed";
+        document.getElementById("whatnow-setup").textContent = help_setup || "";
+        document.getElementById("whatnow-setup-box").style.display = help_setup ? "block" : "none";
+        document.getElementById("whatnow-mount").textContent = help_mount || "";
+        document.getElementById("whatnow-modal").classList.add("open");
+    }
+
+    function closeWhatNow() {
+        document.getElementById("whatnow-modal").classList.remove("open");
+        location.reload();
+    }
+
+    function goToAssign() {
+        document.getElementById("whatnow-modal").classList.remove("open");
+        const btn = document.querySelector('.tab[onclick*="assign"]');
+        if (btn) btn.click();
+    }
+
+    function showHelp(name, setup, mount, path) {
+        document.getElementById("help-title").textContent = name;
+        const pathBox  = document.getElementById("help-path-box");
+        const setupBox = document.getElementById("help-setup-box");
+        const mountBox = document.getElementById("help-mount-box");
+        if (path)  { document.getElementById("help-path").textContent       = path;  pathBox.style.display  = "block"; }
+        else         pathBox.style.display  = "none";
+        if (setup) { document.getElementById("help-setup-text").textContent = setup; setupBox.style.display = "block"; }
+        else         setupBox.style.display = "none";
+        if (mount) { document.getElementById("help-mount-text").textContent = mount; mountBox.style.display = "block"; document.querySelector("#help-mount-box .btn-info").textContent = "📋 Copy to clipboard"; }
+        else         mountBox.style.display = "none";
+        document.getElementById("help-modal").classList.add("open");
+    }
+
+    function closeHelp(e) {
+        if (e.target.id === "help-modal")
+            document.getElementById("help-modal").classList.remove("open");
+    }
+
+    function showQs(idx, el) {
+        document.querySelectorAll(".qs-panel").forEach((p, i) => p.classList.toggle("active", i === idx));
+        document.querySelectorAll(".qs-tab").forEach(t => t.classList.remove("active"));
+        el.classList.add("active");
+    }
+</script>
+
+</body>
+</html>

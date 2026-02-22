@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="{{ current_lang | default('de') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoVi – {{ t.dashboard.title }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header>
+        <div class="logo">
+            <span class="logo-lo">Lo</span><span class="logo-vi">Vi</span>
+            <span class="logo-sub">LOG VIEWER</span>
+        </div>
+        <div class="header-right">
+            <span id="clock"></span>
+            {% if current_user.is_admin %}
+            <a href="/settings" class="nav-link">⚙ {{ t.nav.settings }}</a>
+            <a href="/users" class="nav-link">👤 {{ t.nav.users }}</a>
+            {% endif %}
+            <span class="nav-user">{{ current_user.username }}</span>
+            <form method="POST" action="/settings/language" style="display:inline">
+                <select name="language" onchange="this.form.submit()" class="lang-select">
+                    <option value="de" {% if current_lang == 'de' %}selected{% endif %}>🇩🇪 DE</option>
+                    <option value="en" {% if current_lang == 'en' %}selected{% endif %}>🇬🇧 EN</option>
+                </select>
+            </form>
+            <a href="/logout" class="nav-link logout">{{ t.nav.logout }}</a>
+            <span class="version">v0.1</span>
+        </div>
+    </header>
+
+    <!-- MAIN LAYOUT -->
+    <div class="main-layout">
+
+        <!-- ── SIDEBAR: FILE EXPLORER ── -->
+        <div class="explorer" id="explorer">
+            <div class="explorer-header">
+                <span class="explorer-title">📁 LOGS</span>
+                <div style="display:flex;gap:4px">
+                    <button class="explorer-collapse-all" onclick="expandAll()"  title="Expand all">⊞</button>
+                    <button class="explorer-collapse-all" onclick="collapseAll()" title="Collapse all">⊟</button>
+                </div>
+            </div>
+            <div class="explorer-tree" id="explorer-tree">
+                <div class="explorer-loading">Loading…</div>
+            </div>
+        </div>
+
+        <!-- ── RIGHT: TOOLBAR + GRID ── -->
+        <div class="dashboard">
+
+            <!-- TOOLBAR -->
+            <div class="dash-toolbar">
+                <div class="dash-title">{{ t.dashboard.title }}</div>
+                <div class="dash-tools">
+                    <input type="text" id="search-global"
+                           placeholder="{{ t.dashboard.search }}"
+                           maxlength="50"
+                           onkeydown="if(event.key==='Enter') startSearch()">
+                    <div class="sort-group">
+                        <button class="sort-btn active" onclick="setSort('status', this)" title="Errors first">● Status</button>
+                        <button class="sort-btn" onclick="setSort('alpha', this)"  title="Alphabetical">A–Z</button>
+                        <button class="sort-btn" onclick="setSort('size', this)"   title="Largest first">📊 Size</button>
+                        <button class="sort-btn" onclick="setSort('dir', this)"    title="Group by app">📁 Dir</button>
+                    </div>
+                    <button id="auto-btn" onclick="toggleAutoRefresh()" class="active">{{ t.dashboard.auto_on }}</button>
+                    <button onclick="loadDashboard()">{{ t.dashboard.reload }}</button>
+                </div>
+            </div>
+
+<div class="statusbar-system" id="statusbar-system">
+    <span class="sb-item" id="sb-cpu">⚙ –</span>
+    <span class="sb-item" id="sb-ram">🧠 –</span>
+    <span class="sb-divider">│</span>
+    <span id="sb-disks">💿 –</span>
+    <span class="sb-divider">│</span>
+    <span class="sb-item" id="sb-uptime">⏱ –</span>
+</div>
+
+            <!-- WIDGET GRID -->
+            <div class="widget-grid" id="widget-grid">
+                <div class="dash-loading">{{ t.dashboard.loading }}</div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- SEARCH MODAL -->
+    <div class="modal-overlay" id="search-modal" onclick="closeSearchModal(event)">
+        <div class="modal-box" style="max-width:1100px">
+            <div class="modal-header">
+                <div class="modal-title" id="search-modal-title">─</div>
+                <button onclick="document.getElementById('search-modal').classList.remove('open')">
+                    {{ t.viewer.close }}
+                </button>
+            </div>
+            <div class="search-tabs" id="search-tabs"></div>
+            <div class="modal-log" id="search-results"></div>
+            <div class="modal-statusbar"><span id="search-info">─</span></div>
+        </div>
+    </div>
+
+    <!-- LOG MODAL -->
+    <div class="modal-overlay" id="modal" onclick="closeModal(event)">
+        <div class="modal-box">
+            <div class="modal-header">
+                <div class="modal-title" id="modal-title">─</div>
+                <div class="modal-tools">
+                    <input type="text" id="modal-search"
+                           placeholder="{{ t.viewer.search }}"
+                           oninput="filterModal()">
+                    <select id="modal-lines" onchange="loadModalLog()">
+                        <option value="50">50 {{ t.viewer.lines }}</option>
+                        <option value="200" selected>200 {{ t.viewer.lines }}</option>
+                        <option value="500">500 {{ t.viewer.lines }}</option>
+                        <option value="1000">1000 {{ t.viewer.lines }}</option>
+                    </select>
+                    <button onclick="closeModalBtn()">{{ t.viewer.close }}</button>
+                </div>
+            </div>
+            <div class="modal-log" id="modal-log"></div>
+            <div class="modal-statusbar">
+                <span id="modal-info">─</span>
+                <span id="modal-update">─</span>
+            </div>
+        </div>
+    </div>
+
+<script>
+const T = {
+    auto_on:          "{{ t.dashboard.auto_on }}",
+    auto_off:         "{{ t.dashboard.auto_off }}",
+    no_files:         "{{ t.dashboard.no_files }}",
+    loading_error:    "⚠ {{ t.dashboard.error }}",
+    lines_loaded:     "{{ t.dashboard.lines_loaded }}",
+    click_fullscreen: "{{ t.dashboard.click_fullscreen }}",
+    no_entries:       "{{ t.dashboard.no_entries }}",
+    updated:          "{{ t.viewer.updated }}",
+    viewer_empty:     "{{ t.viewer.no_entries }}"
+};
+
+let currentSort   = "status";
+let autoRefresh   = true;
+let refreshTimer  = null;
+let modalTimer    = null;
+let currentModal  = null;
+let allWidgetData = [];
+// filename → true/false (hidden state, von API geladen)
+let hiddenState   = {};
+
+// ── Uhr ──────────────────────────────────────────────────
+function updateClock() {
+    document.getElementById("clock").textContent = new Date().toLocaleTimeString();
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Explorer laden ────────────────────────────────────────
+function loadExplorer() {
+    return fetch("/api/files/meta")
+        .then(r => r.json())
+        .then(data => {
+            hiddenState = {};
+            data.files.forEach(f => hiddenState[f.filename] = f.hidden);
+            renderExplorer(data.files);
+            collapseAll();
+        });
+}
+
+function renderExplorer(files) {
+    // Aufteilen in Verzeichnisse
+    const dirs = {};   // dirName → [fileObj, ...]
+    const root = [];   // Dateien ohne Unterverzeichnis
+
+    files.forEach(f => {
+        const parts = f.filename.split("/");
+        if (parts.length > 1) {
+            const dir = parts[0];
+            if (!dirs[dir]) dirs[dir] = [];
+            dirs[dir].push(f);
+        } else {
+            root.push(f);
+        }
+    });
+
+    let html = "";
+
+    // Verzeichnisse (sortiert)
+    Object.keys(dirs).sort().forEach(dir => {
+        const allHidden = dirs[dir].every(f => f.hidden);
+        html += `
+        <div class="ex-dir" id="exdir-${cssId(dir)}">
+            <div class="ex-dir-header" onclick="toggleDir('${cssId(dir)}')">
+                <span class="ex-dir-arrow" id="arrow-${cssId(dir)}">▾</span>
+                <span class="ex-dir-icon">📁</span>
+                <span class="ex-dir-name">${dir}</span>
+                <span class="ex-dir-count">${dirs[dir].length}</span>
+            </div>
+            <div class="ex-dir-files" id="dirfiles-${cssId(dir)}">
+                ${dirs[dir].sort((a,b) => a.filename.localeCompare(b.filename)).map(f => fileRow(f)).join("")}
+            </div>
+        </div>`;
+    });
+
+    // Root-Dateien
+    if (root.length > 0) {
+        html += `<div class="ex-root">`;
+        root.sort((a,b) => a.filename.localeCompare(b.filename)).forEach(f => {
+            html += fileRow(f);
+        });
+        html += `</div>`;
+    }
+
+    document.getElementById("explorer-tree").innerHTML = html || '<div class="explorer-loading">No logs found</div>';
+}
+
+function fileRow(f) {
+    const name      = f.filename.includes("/") ? f.filename.split("/").slice(1).join("/") : f.filename;
+    const assigned  = f.assigned || false;
+    const eyeClass  = assigned ? "eye-open" : "eye-closed";
+    const eyeTitle  = assigned ? "Visible – click to hide" : "Hidden – click to show";
+    const rowClass  = assigned ? "ex-file" : "ex-file hidden";
+    const rotating  = f.rotating ? ' <span class="ex-rotating" title="Rotating log">↻</span>' : "";
+    return `
+    <div class="${rowClass}" id="exfile-${cssId(f.filename)}">
+        <span class="ex-file-icon">📄</span>
+        <span class="ex-file-name" onclick="openModal('${f.filename}')" title="${f.filename}">${name}${rotating}</span>
+        <button class="eye-btn ${eyeClass}" onclick="toggleAssign('${f.filename}')" title="${eyeTitle}">
+            ${assigned ? "👁" : "🚫"}
+        </button>
+        <button class="del-btn" onclick="deleteFile('${f.filename}')" title="Datei löschen">🗑</button>
+    </div>`;
+}
+
+function expandAll() {
+    document.querySelectorAll(".ex-dir-files").forEach(el => el.style.display = "block");
+    document.querySelectorAll(".ex-dir-arrow").forEach(el => el.textContent = "▾");
+}
+
+function deleteFile(filename) {
+    if (!confirm("🗑 Datei wirklich löschen?\n\n\"" + filename + "\"\n\nDiese Aktion kann NICHT rückgängig gemacht werden!")) return;
+    fetch("/api/files/delete", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({filename})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            loadExplorer();
+            loadDashboard();
+        } else {
+            alert("Fehler: " + (data.error || "Unbekannter Fehler"));
+        }
+    });
+}
+
+function cssId(str) {
+    return str.replace(/[^a-zA-Z0-9]/g, "_");
+}
+
+function toggleDir(id) {
+    const files = document.getElementById("dirfiles-" + id);
+    const arrow = document.getElementById("arrow-" + id);
+    const open  = files.style.display !== "none";
+    files.style.display = open ? "none" : "block";
+    arrow.textContent   = open ? "▸" : "▾";
+}
+
+function collapseAll() {
+    document.querySelectorAll(".ex-dir-files").forEach(el => el.style.display = "none");
+    document.querySelectorAll(".ex-dir-arrow").forEach(el => el.textContent = "▸");
+}
+
+// ── Hidden Toggle (AJAX, kein Reload) ────────────────────
+function toggleAssign(filename) {
+    fetch("/api/files/assign-toggle", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({filename})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const assigned = data.assigned;
+            const row = document.getElementById("exfile-" + cssId(filename));
+            if (row) {
+                row.className = assigned ? "ex-file" : "ex-file hidden";
+                const btn = row.querySelector(".eye-btn");
+                btn.className   = "eye-btn " + (assigned ? "eye-open" : "eye-closed");
+                btn.title       = assigned ? "Visible – click to hide" : "Hidden – click to show";
+                btn.textContent = assigned ? "👁" : "🚫";
+            }
+            loadDashboard();
+        }
+    });
+}
+
+// ── Dashboard laden ───────────────────────────────────────
+function loadDashboard() {
+    fetch("/api/summary")
+        .then(r => r.json())
+        .then(data => {
+            allWidgetData = data.files;
+            renderWidgets(allWidgetData);
+        })
+        .catch(() => {
+            document.getElementById("widget-grid").innerHTML =
+                `<div class="dash-loading">${T.loading_error}</div>`;
+        });
+}
+
+// ── Sortierung ────────────────────────────────────────────
+function setSort(mode, el) {
+    currentSort = mode;
+    document.querySelectorAll(".sort-btn").forEach(b => b.classList.remove("active"));
+    el.classList.add("active");
+    renderWidgets(allWidgetData);
+}
+
+function sortFiles(files) {
+    const healthOrder = {error: 0, warn: 1, ok: 2};
+    const copy = [...files];
+    if (currentSort === "status") {
+        copy.sort((a, b) => {
+            const hd = healthOrder[a.health] - healthOrder[b.health];
+            return hd !== 0 ? hd : a.file.localeCompare(b.file);
+        });
+    } else if (currentSort === "alpha") {
+        copy.sort((a, b) => a.file.localeCompare(b.file));
+    } else if (currentSort === "size") {
+        copy.sort((a, b) => {
+            function parseSize(s) {
+                const m = s.match(/([\d.]+)\s*(MB|KB)/i);
+                if (!m) return 0;
+                return parseFloat(m[1]) * (m[2].toUpperCase() === "MB" ? 1024 : 1);
+            }
+            return parseSize(b.size) - parseSize(a.size);
+        });
+    } else if (currentSort === "dir") {
+        copy.sort((a, b) => {
+            const da = a.file.includes("/") ? a.file.split("/")[0] : "\x00";
+            const db = b.file.includes("/") ? b.file.split("/")[0] : "\x00";
+            const dd = da.localeCompare(db);
+            return dd !== 0 ? dd : a.file.localeCompare(b.file);
+        });
+    }
+    return copy;
+}
+
+// ── Widgets rendern ───────────────────────────────────────
+function renderWidgets(files) {
+    files = sortFiles(files);
+    const grid = document.getElementById("widget-grid");
+    if (files.length === 0) {
+        grid.innerHTML = `<div class="dash-loading">${T.no_files}</div>`;
+        return;
+    }
+    let lastDir = null;
+    grid.innerHTML = files.map(f => {
+        const healthClass = f.health === "error" ? "health-error" :
+                            f.health === "warn"  ? "health-warn"  : "health-ok";
+        const healthLabel = f.health === "error" ? "ERROR" :
+                            f.health === "warn"  ? "WARN"  : "OK";
+        const linesHtml = f.lines.length > 0
+            ? f.lines.map(l => `<div class="widget-line ${l.level}">${escapeHtml(l.text)}</div>`).join("")
+            : `<div class="widget-empty">${T.no_entries}</div>`;
+
+        let dirHeader = "";
+        if (currentSort === "dir") {
+            const dir = f.file.includes("/") ? f.file.split("/")[0] : "─";
+            if (dir !== lastDir) {
+                lastDir = dir;
+                dirHeader = `<div class="widget-dir-label">📁 ${dir}</div>`;
+            }
+        }
+        return dirHeader + `
+        <div class="widget ${healthClass}" onclick="openModal('${f.file}')">
+            <div class="widget-header">
+                <div class="widget-name">${f.file}</div>
+                <div class="widget-badge ${healthClass}">${healthLabel}</div>
+            </div>
+            <div class="widget-lines">${linesHtml}</div>
+            <div class="widget-footer">
+                <span>${f.size}</span>
+                <span>${f.total} ${T.lines_loaded}</span>
+                <span class="widget-hint">${T.click_fullscreen}</span>
+            </div>
+            ${f.stats ? `<div class="widget-chart">${renderMiniChart(f.stats)}</div>` : ""}
+        </div>`;
+    }).join("");
+}
+
+// ── Globale Suche ─────────────────────────────────────────
+let searchData = [];
+
+function startSearch() {
+    const q = document.getElementById("search-global").value.trim();
+    if (q.length < 4) {
+        document.getElementById("search-global").style.borderColor = "var(--error)";
+        setTimeout(() => document.getElementById("search-global").style.borderColor = "", 1000);
+        return;
+    }
+    document.getElementById("search-modal-title").textContent = `🔍 "${q}"`;
+    document.getElementById("search-modal").classList.add("open");
+    document.getElementById("search-results").innerHTML = '<div class="dash-loading">Searching…</div>';
+    document.getElementById("search-tabs").innerHTML = "";
+
+    fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(data => {
+            searchData = data.results;
+            if (!searchData || searchData.length === 0) {
+                document.getElementById("search-results").innerHTML = `<div class="log-empty">${T.viewer_empty}</div>`;
+                document.getElementById("search-info").textContent = "0 results";
+                return;
+            }
+            renderSearchTabs(0);
+            const total = searchData.reduce((s, f) => s + f.count, 0);
+            document.getElementById("search-info").textContent = `${total} matches in ${searchData.length} files`;
+        });
+}
+
+function renderSearchTabs(activeIdx) {
+    const tabsEl = document.getElementById("search-tabs");
+    tabsEl.innerHTML = searchData.map((f, i) => `
+        <button class="search-tab ${i === activeIdx ? 'active' : ''}" onclick="renderSearchTabs(${i})">
+            ${f.file}<span class="search-tab-count">${f.count}</span>
+        </button>`).join("");
+    const f = searchData[activeIdx];
+    const q = document.getElementById("search-global").value.trim().toLowerCase();
+    document.getElementById("search-results").innerHTML = f.lines.map(l => {
+        const highlighted = escapeHtml(l.text).replace(
+            new RegExp(escapeHtml(q), "gi"),
+            m => `<mark class="search-highlight">${m}</mark>`
+        );
+        return `<div class="log-line ${l.level}">${highlighted}</div>`;
+    }).join("");
+}
+
+function closeSearchModal(e) {
+    if (e.target.id === "search-modal") document.getElementById("search-modal").classList.remove("open");
+}
+
+// ── Auto Refresh ──────────────────────────────────────────
+function toggleAutoRefresh() {
+    autoRefresh = !autoRefresh;
+    const btn = document.getElementById("auto-btn");
+    if (autoRefresh) {
+        btn.textContent = T.auto_on;
+        btn.classList.add("active");
+        refreshTimer = setInterval(loadDashboard, 10000);
+    } else {
+        btn.textContent = T.auto_off;
+        btn.classList.remove("active");
+        clearInterval(refreshTimer);
+    }
+}
+
+// ── Log Modal ─────────────────────────────────────────────
+function openModal(filename) {
+    currentModal = filename;
+    document.getElementById("modal-title").textContent = filename;
+    document.getElementById("modal-search").value = "";
+    document.getElementById("modal").classList.add("open");
+    loadModalLog();
+    modalTimer = setInterval(loadModalLog, 10000);
+}
+
+function closeModalBtn() {
+    document.getElementById("modal").classList.remove("open");
+    currentModal = null;
+    clearInterval(modalTimer);
+    modalTimer = null;
+}
+
+function closeModal(e) { if (e.target.id === "modal") closeModalBtn(); }
+
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModalBtn(); });
+
+function loadModalLog() {
+    if (!currentModal) return;
+    const lines  = document.getElementById("modal-lines").value;
+    const search = document.getElementById("modal-search").value;
+    fetch(`/api/logs?file=${encodeURIComponent(currentModal)}&lines=${lines}&search=${encodeURIComponent(search)}`)
+        .then(r => r.json())
+        .then(data => {
+            const log = document.getElementById("modal-log");
+            if (!data.lines || data.lines.length === 0) {
+                log.innerHTML = `<div class="log-empty">${T.viewer_empty}</div>`;
+                return;
+            }
+            const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 50;
+            const savedScroll = log.scrollTop;
+            log.innerHTML = data.lines.map(l =>
+                `<div class="log-line ${l.level}">${escapeHtml(l.text)}</div>`
+            ).join("");
+            if (atBottom) {
+                log.scrollTop = log.scrollHeight;
+            } else {
+                log.scrollTop = savedScroll;
+            }
+            document.getElementById("modal-info").textContent   = `${data.lines.length} ${T.lines_loaded}`;
+            document.getElementById("modal-update").textContent = `${T.updated}: ${new Date().toLocaleTimeString()}`;
+        });
+}
+
+function filterModal() { loadModalLog(); }
+
+function renderMiniChart(stats) {
+    const W = 260, H = 24, pad = 2;
+    const maxE = Math.max(...stats.map(s => s.e), 1);
+    const maxW = Math.max(...stats.map(s => s.w), 1);
+    const n = stats.length;
+    if (n < 2) return `<div class="mc-wrap"><span class="mc-label">24h</span><svg width="${W}" height="${H}"></svg></div>`;
+
+    function makePath(vals, maxV, color, opacity) {
+        const pts = vals.map((v, i) => {
+            const x = pad + (i / (n - 1)) * (W - pad * 2);
+            const y = H - pad - (v / maxV) * (H - pad * 2);
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(" ");
+        // Area unter der Linie
+        const first = pad + ","+H;
+        const last  = (pad + (W - pad*2)).toFixed(1) + ","+H;
+        return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" opacity="${opacity}"/>
+                <polygon points="${first} ${pts} ${last}" fill="${color}" opacity="0.15"/>`;
+    }
+
+    const errPath  = makePath(stats.map(s => s.e), maxE, "#ff2222", "0.9");
+    const warnPath = makePath(stats.map(s => s.w), maxW, "#ffcc00", "0.7");
+
+    return `<div class="mc-wrap" title="ERRORs/WARNs last 24h">
+        <span class="mc-label">24h</span>
+        <svg width="${W}" height="${H}" style="flex:1;min-width:0">
+            ${warnPath}
+            ${errPath}
+        </svg>
+    </div>`;
+}
+
+function escapeHtml(text) {
+    return text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// ── Init ──────────────────────────────────────────────────
+loadExplorer();
+loadDashboard();
+refreshTimer = setInterval(loadDashboard, 10000);
+</script>
+<!-- ── JS: am Ende des <script> Blocks einfügen ── -->
+<script>
+// ── Statusleiste ──────────────────────────────────────────
+function loadSystemStatus() {
+    fetch("/api/system")
+        .then(r => r.json())
+        .then(d => {
+            // CPU
+            const cpuEl = document.getElementById("sb-cpu");
+            cpuEl.textContent = `⚙ ${d.cpu}%`;
+            cpuEl.className = "sb-item" + alertClass(d.cpu);
+
+            // RAM
+            const ramEl = document.getElementById("sb-ram");
+            ramEl.textContent = `🧠 ${d.ram_pct}%`;
+            ramEl.className = "sb-item" + alertClass(d.ram_pct);
+
+            // Disks
+            //const diskIcons = { nvme: "💿", ssd: "💿", hdd: "💿", unknown: "💿" };
+            const diskIcons = { nvme: "💿", ssd: "💿", hdd: "💿", unknown: "💿" };
+            const disksHtml = d.disks.map(disk => {
+                const icon  = diskIcons[disk.type] || "💿";
+                const cls   = "sb-disk" + alertClass(disk.pct);
+                const title = `${disk.mount} – ${disk.used_gb}/${disk.total_gb} GB`;
+                return `<span class="${cls}" title="${title}">${icon} ${disk.pct}%</span>`;
+            }).join('<span class="sb-disk-sep">–</span>');
+            document.getElementById("sb-disks").innerHTML = disksHtml || "💿 –";
+
+            // Uptime
+            document.getElementById("sb-uptime").textContent = `⏱ ${d.uptime}`;
+        })
+        .catch(() => {});
+}
+
+function alertClass(pct) {
+    if (pct >= 90) return " sb-critical";
+    if (pct >= 80) return " sb-warn";
+    return "";
+}
+
+// Beim Start + alle 10s aktualisieren
+loadSystemStatus();
+setInterval(loadSystemStatus, 10000);
+</script>
+</body>
+</html>

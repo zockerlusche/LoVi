@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="{{ current_lang | default('de') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoVi – {{ t.users.title }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header>
+        <div class="logo">
+            <span class="logo-lo">Lo</span><span class="logo-vi">Vi</span>
+            <span class="logo-sub">LOG VIEWER</span>
+        </div>
+        <div class="header-right">
+            <a href="/" class="nav-link">▸ {{ t.nav.dashboard }}</a>
+            {% if current_user.is_admin %}
+            <a href="/settings" class="nav-link">⚙ {{ t.nav.settings }}</a>
+            <a href="/users" class="nav-link">👤 {{ t.nav.users }}</a>
+            {% endif %}
+            <span class="nav-user">{{ current_user.username }}</span>
+            <form method="POST" action="/settings/language" style="display:inline">
+                <select name="language" onchange="this.form.submit()" class="lang-select">
+                    <option value="de" {% if current_lang == 'de' %}selected{% endif %}>🇩🇪 DE</option>
+                    <option value="en" {% if current_lang == 'en' %}selected{% endif %}>🇬🇧 EN</option>
+                </select>
+            </form>
+            <a href="/logout" class="nav-link logout">{{ t.nav.logout }}</a>
+            <span class="version">v0.1</span>
+        </div>
+    </header>
+
+    <div class="admin-container">
+
+        <div class="admin-title">{{ t.users.title }}</div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <!-- USER TABELLE -->
+        <div class="admin-card">
+            <div class="admin-card-title">{{ t.users.existing }}</div>
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>{{ t.users.id }}</th>
+                        <th>{{ t.users.username }}</th>
+                        <th>{{ t.users.role }}</th>
+                        <th>{{ t.users.action }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for user in users %}
+                <tr>
+                    <td class="muted">{{ user.id }}</td>
+                    <td>{{ user.username }}</td>
+                    <td>
+                        {% if user.is_admin %}
+                        <span class="badge badge-admin">{{ t.users.admin }}</span>
+                        {% else %}
+                        <span class="badge badge-user">{{ t.users.user }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.id != current_user.id %}
+                        <form method="POST" action="/users/delete/{{ user.id }}"
+                              onsubmit="return confirm('{{ user.username }} – {{ t.users.delete_confirm }}')">
+                            <button class="btn-danger">{{ t.users.delete }}</button>
+                        </form>
+                        {% else %}
+                        <span class="muted">{{ t.users.self }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- NEUER USER -->
+        <div class="admin-card">
+            <div class="admin-card-title">{{ t.users.add_title }}</div>
+            <div class="add-user-form">
+                <div class="form-group">
+                    <label>{{ t.users.new_username }}</label>
+                    <input type="text" id="new-username" placeholder="{{ t.users.new_username }}">
+                </div>
+                <div class="form-group">
+                    <label>{{ t.users.new_password }}</label>
+                    <input type="password" id="new-password" placeholder="••••••">
+                </div>
+                <div class="form-group form-check">
+                    <input type="checkbox" id="new-admin">
+                    <label for="new-admin">{{ t.users.new_admin }}</label>
+                </div>
+                <button class="login-btn" onclick="addUser()">{{ t.users.add_submit }}</button>
+            </div>
+        </div>
+
+    </div>
+
+<script>
+    const MSG_INVALID = "{{ t.users.invalid }}";
+
+    function addUser() {
+        const username = document.getElementById("new-username").value.trim();
+        const password = document.getElementById("new-password").value;
+        const is_admin = document.getElementById("new-admin").checked ? "on" : "";
+
+        if (!username || password.length < 6) {
+            alert(MSG_INVALID);
+            return;
+        }
+
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = "/users/add";
+
+        [["username", username], ["password", password], ["is_admin", is_admin]].forEach(([n, v]) => {
+            const i = document.createElement("input");
+            i.name = n; i.value = v;
+            form.appendChild(i);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+</script>
+
+</body>
+</html>
