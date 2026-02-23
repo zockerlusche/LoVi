@@ -173,28 +173,21 @@ function loadExplorer() {
 }
 
 function renderExplorer(files) {
-    // Aufteilen in Verzeichnisse
-    const dirs = {};   // dirName → [fileObj, ...]
-    const root = [];   // Dateien ohne Unterverzeichnis
-
-    files.forEach(f => {
+    const active   = files.filter(f => !f.rotating);
+    const rotating = files.filter(f => f.rotating);
+    const dirs = {};
+    const root = [];
+    active.forEach(f => {
         const parts = f.filename.split("/");
         if (parts.length > 1) {
             const dir = parts[0];
             if (!dirs[dir]) dirs[dir] = [];
             dirs[dir].push(f);
-        } else {
-            root.push(f);
-        }
+        } else { root.push(f); }
     });
-
     let html = "";
-
-    // Verzeichnisse (sortiert)
     Object.keys(dirs).sort().forEach(dir => {
-        const allHidden = dirs[dir].every(f => f.hidden);
-        html += `
-        <div class="ex-dir" id="exdir-${cssId(dir)}">
+        html += `<div class="ex-dir" id="exdir-${cssId(dir)}">
             <div class="ex-dir-header" onclick="toggleDir('${cssId(dir)}')">
                 <span class="ex-dir-arrow" id="arrow-${cssId(dir)}">▾</span>
                 <span class="ex-dir-icon">📁</span>
@@ -206,35 +199,52 @@ function renderExplorer(files) {
             </div>
         </div>`;
     });
-
-    // Root-Dateien
     if (root.length > 0) {
         html += `<div class="ex-root">`;
-        root.sort((a,b) => a.filename.localeCompare(b.filename)).forEach(f => {
-            html += fileRow(f);
-        });
+        root.sort((a,b) => a.filename.localeCompare(b.filename)).forEach(f => { html += fileRow(f); });
         html += `</div>`;
     }
-
+    if (rotating.length > 0) {
+        html += `<div class="ex-archive">
+            <div class="ex-archive-header" onclick="toggleArchive()">
+                <span class="ex-dir-arrow" id="arrow-archive">▸</span>
+                <span class="ex-dir-icon">🗄</span>
+                <span class="ex-dir-name">Rotating Logs</span>
+                <span class="ex-dir-count">${rotating.length}</span>
+            </div>
+            <div class="ex-dir-files" id="dirfiles-archive" style="display:none">
+                ${rotating.sort((a,b) => a.filename.localeCompare(b.filename)).map(f => fileRowArchive(f)).join("")}
+            </div>
+        </div>`;
+    }
     document.getElementById("explorer-tree").innerHTML = html || '<div class="explorer-loading">No logs found</div>';
 }
-
 function fileRow(f) {
-    const name      = f.filename.includes("/") ? f.filename.split("/").slice(1).join("/") : f.filename;
-    const assigned  = f.assigned || false;
-    const eyeClass  = assigned ? "eye-open" : "eye-closed";
-    const eyeTitle  = assigned ? "Visible – click to hide" : "Hidden – click to show";
-    const rowClass  = assigned ? "ex-file" : "ex-file hidden";
-    const rotating  = f.rotating ? ' <span class="ex-rotating" title="Rotating log">↻</span>' : "";
-    return `
-    <div class="${rowClass}" id="exfile-${cssId(f.filename)}">
+    const name     = f.filename.includes("/") ? f.filename.split("/").slice(1).join("/") : f.filename;
+    const assigned = f.assigned || false;
+    const eyeTitle = assigned ? "Visible – click to hide" : "Hidden – click to show";
+    const rowClass = assigned ? "ex-file" : "ex-file hidden";
+    return `<div class="${rowClass}" id="exfile-${cssId(f.filename)}">
         <span class="ex-file-icon">📄</span>
-        <span class="ex-file-name" onclick="openModal('${f.filename}')" title="${f.filename}">${name}${rotating}</span>
-        <button class="eye-btn ${eyeClass}" onclick="toggleAssign('${f.filename}')" title="${eyeTitle}">
-            ${assigned ? "👁" : "🚫"}
-        </button>
-        <button class="del-btn" onclick="deleteFile('${f.filename}')" title="Datei löschen">🗑</button>
+        <span class="ex-file-name" onclick="openModal('${f.filename}')" title="${f.filename}">${name}</span>
+        <button class="eye-btn ${assigned ? 'eye-open' : 'eye-closed'}" onclick="toggleAssign('${f.filename}')" title="${eyeTitle}">${assigned ? "👁" : "🚫"}</button>
+        <button class="del-btn" onclick="deleteFile('${f.filename}')" title="Delete">🗑</button>
     </div>`;
+}
+function fileRowArchive(f) {
+    const name = f.filename.includes("/") ? f.filename.split("/").slice(1).join("/") : f.filename;
+    return `<div class="ex-file hidden" id="exfile-${cssId(f.filename)}">
+        <span class="ex-file-icon">📄</span>
+        <span class="ex-file-name" onclick="openModal('${f.filename}')" title="${f.filename}">${name}</span>
+        <button class="del-btn" onclick="deleteFile('${f.filename}')" title="Delete">🗑</button>
+    </div>`;
+}
+function toggleArchive() {
+    const files = document.getElementById("dirfiles-archive");
+    const arrow = document.getElementById("arrow-archive");
+    const open  = files.style.display !== "none";
+    files.style.display = open ? "none" : "block";
+    arrow.textContent   = open ? "▸" : "▾";
 }
 
 function expandAll() {

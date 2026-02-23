@@ -49,12 +49,11 @@
         <div class="tabs">
             <button class="tab active" onclick="showTab('quickstart', this)">&#128640; Quick Start</button>
             <button class="tab" onclick="showTab('github', this)">{{ t.settings.tab_github }}</button>
-            <button class="tab" onclick="showTab('profiles', this)">{{ t.settings.tab_profiles }}</button>
-            <button class="tab" onclick="showTab('assign', this)">{{ t.settings.tab_assign }}</button>
-            <button class="tab" onclick="showTab('new', this)">{{ t.settings.tab_new }}</button>
+            <button class="tab" onclick="showTab('profiles', this)">&#128203; Profiles &amp; Assign</button>
+            <button class="tab" onclick="showTab('new', this)">&#10133; Custom Profile</button>
+
             <button class="tab" onclick="showTab('notifications', this)">&#128276; Notifications</button>
             <button class="tab" onclick="showTab('backup', this)">&#128190; Backup</button>
-            <button class="tab" onclick="showTab('logfiles', this)">&#128196; Log Files</button>
         </div>
 
         <!-- TAB: QUICK START -->
@@ -237,219 +236,151 @@ docker-compose up -d radarr</pre>
             </div>
         </div>
 
-        <!-- TAB: LOG FILES -->
-        <div id="tab-logfiles" class="tab-content admin-card" style="display:none; padding:0; overflow:hidden">
-
-            <!-- STICKY HEADER – immer sichtbar -->
-            <div style="padding:16px 24px 12px; border-bottom:1px solid var(--border); background:var(--bg-panel); flex-shrink:0">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                    <span class="admin-card-title" style="border:none;padding:0;margin:0">&#128196; Log File Management</span>
-
-<div style="display:flex;gap:8px;flex-wrap:wrap">
-    <form method="POST" action="/settings/logfiles/show-all"
-          onsubmit="return confirm('Show all hidden log files?')">
-        <button class="btn-info" style="border-color:var(--info);color:var(--info)">
-            👁 Show all hidden
-        </button>
-    </form>
-    <form method="POST" action="/settings/logfiles/hide-rotating"
-          onsubmit="return confirm('Hide all rotating/backup logs (*.0.txt, *.1.txt …)?')">
-        <button class="btn-danger" style="border-color:var(--warn);color:var(--warn)">
-            🚫 Hide all rotating logs
-        </button>
-    </form>
-</div>
-
+        <!-- TAB: GITHUB -->
+        <div id="tab-github" class="tab-content admin-card" style="display:none; padding:0; overflow:hidden">
+            <div id="github-header" style="padding:16px 24px 12px; border-bottom:1px solid var(--border); background:var(--bg-panel)">
+                <div class="admin-card-title" style="border:none;padding:0;margin-bottom:8px">{{ t.settings.github_title }}</div>
+                <div class="github-hint">
+                    {{ t.settings.github_hint }}
+                    <code>{{ github_user }}/{{ github_repo }}</code>
                 </div>
-                <div style="font-size:12px;color:var(--text-muted);padding:8px 12px;background:var(--bg-dark);border-left:3px solid var(--accent);border-radius:0 4px 4px 0">
-                    Hidden files are removed from the Dashboard and search. Rotating logs (e.g. <code>radarr.debug.0.txt</code>) are auto-detected and can be bulk-hidden.
-                </div>
-            </div>
-
-            <!-- SCROLLBARE TABELLE -->
-            <div style="overflow-y:auto; max-height:calc(100vh - 320px); padding:0 24px 24px">
-                <table class="user-table">
-                    <thead>
-                        <tr>
-                            <th>File</th>
-                            <th>Type</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {% for f in files_meta %}
-                    <tr style="{% if f.hidden %}opacity:0.45{% endif %}">
-                        <td style="font-family:var(--font-mono);font-size:12px;color:var(--text)">
-                            {{ f.filename }}
-                        </td>
-                        <td>
-                            {% if f.rotating %}
-                            <span class="badge" style="color:var(--warn);border-color:var(--warn)">rotating</span>
-                            {% else %}
-                            <span class="badge badge-user">normal</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if f.hidden %}
-                            <span class="badge" style="color:var(--text-muted);border-color:var(--border)">hidden</span>
-                            {% else %}
-                            <span class="badge badge-admin">visible</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <form method="POST" action="/settings/logfiles/hide" style="display:inline">
-                                <input type="hidden" name="filename" value="{{ f.filename }}">
-                                {% if f.hidden %}
-                                <input type="hidden" name="action" value="show">
-                                <button class="btn-info" style="font-size:11px;padding:3px 8px">&#128065; Show</button>
-                                {% else %}
-                                <input type="hidden" name="action" value="hide">
-                                <button class="btn-danger" style="font-size:11px;padding:3px 8px">&#128683; Hide</button>
-                                {% endif %}
-                            </form>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="4" class="muted" style="text-align:center;padding:24px">
-                            No log files found. Mount a <code>/logs</code> volume first.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-        </div>
-
-        <!-- TAB: PROFILE LISTE -->
-        <div id="tab-profiles" class="tab-content admin-card" style="display:none">
-            <div class="admin-card-title">{{ t.settings.profiles_title }}</div>
-            <table class="user-table">
-                <thead>
-                    <tr>
-                        <th>{{ t.settings.col_name }}</th>
-                        <th>{{ t.settings.col_desc }}</th>
-                        <th>{{ t.settings.col_source }}</th>
-                        <th>{{ t.settings.col_version }}</th>
-                        <th>{{ t.settings.col_help }}</th>
-                        <th>{{ t.settings.col_action }}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for p in profiles %}
-                <tr>
-                    <td><strong>{{ p.name }}</strong></td>
-                    <td class="muted" style="font-size:12px">{{ p.description }}</td>
-                    <td>
-                        {% if p.source == 'builtin' %}
-                        <span class="badge badge-admin">{{ t.settings.builtin }}</span>
-                        {% elif p.source == 'github' %}
-                        <span class="badge" style="color:#f0883e;border-color:#f0883e">GitHub</span>
-                        {% else %}
-                        <span class="badge badge-user">{{ t.settings.local }}</span>
-                        {% endif %}
-                    </td>
-                    <td class="muted">{{ p.version }}</td>
-                    <td>
-                        {% if p.help_setup %}
-                        <button class="btn-info" onclick="showHelp('{{ p.name }}', `{{ p.help_setup | replace('`', "'") }}`, `{{ p.help_mount | replace('`', "'") }}`, `{{ p.log_path_hint | replace('`', "'") }}`)">
-                            {{ t.settings.info_btn }}
-                        </button>
-                        {% else %}
-                        <span class="muted">&#8211;</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if p.source != 'builtin' %}
-                        <form method="POST" action="/settings/profile/delete/{{ p.id }}"
-                              onsubmit="return confirm('{{ t.settings.delete_confirm }}')">
-                            <button class="btn-danger">{{ t.settings.delete_btn }}</button>
-                        </form>
-                        {% else %}
-                        <span class="muted">&#8211;</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- TAB: ZUWEISEN -->
-        <div id="tab-assign" class="tab-content admin-card" style="display:none">
-            <div class="admin-card-title">{{ t.settings.assign_title }}</div>
-            <div class="add-user-form">
-                <div class="form-group">
-                    <label>{{ t.settings.assign_file }}</label>
-                    <select id="assign-file">
-                        {% for f in log_files %}
-                        <option value="{{ f }}">{{ f }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>{{ t.settings.assign_label }}</label>
-                    <input type="text" id="assign-label"
-                           placeholder="{{ t.settings.assign_label_hint }}">
-                </div>
-                <div class="form-group">
-                    <label>{{ t.settings.assign_profile }}</label>
-                    <select id="assign-profile">
-                        {% for p in profiles %}
-                        <option value="{{ p.id }}">{{ p.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <button class="login-btn" onclick="saveAssign()">
-                    {{ t.settings.assign_submit }}
+                <button class="login-btn" style="width:auto;padding:8px 20px;margin-top:12px"
+                        onclick="loadGithubProfiles()">
+                    {{ t.settings.github_load }}
                 </button>
             </div>
-
-            {% if assignments %}
-            <div style="margin-top:24px">
-                <div class="admin-card-title" style="margin-bottom:12px">
-                    {{ t.settings.assign_current }}
+            <div id="github-list" style="overflow-y:auto; padding:16px 24px 24px">
+                <div class="muted" style="font-size:13px">
+                    {{ t.settings.github_load }}
                 </div>
+            </div>
+        </div>
+
+        <!-- TAB: PROFILES & ASSIGN -->
+        <div id="tab-profiles" class="tab-content admin-card" style="display:none; padding:0; overflow:hidden">
+            <div id="profiles-header" style="padding:16px 24px 12px; border-bottom:1px solid var(--border); background:var(--bg-panel)">
+                <div class="admin-card-title" style="border:none;padding:0;margin-bottom:12px">&#128279; {{ t.settings.assign_title }}</div>
+                <div class="add-user-form" style="margin:0">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>{{ t.settings.assign_file }}</label>
+                            <select id="assign-file">
+                                {% for f in log_files %}
+                                <option value="{{ f }}">{{ f }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>{{ t.settings.assign_label }}</label>
+                            <input type="text" id="assign-label" placeholder="{{ t.settings.assign_label_hint }}">
+                        </div>
+                        <div class="form-group">
+                            <label>{{ t.settings.assign_profile }}</label>
+                            <select id="assign-profile">
+                                {% for p in profiles %}
+                                <option value="{{ p.id }}">{{ p.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <button class="login-btn" style="width:auto;padding:8px 20px" onclick="saveAssign()">
+                        {{ t.settings.assign_submit }}
+                    </button>
+                </div>
+            </div><!-- /profiles-header -->
+
+            <div id="profiles-list" style="overflow-y:auto; padding:16px 24px 24px">
+                {% if assignments %}
+                <div style="margin-bottom:32px">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>{{ t.settings.assign_file }}</th>
+                                <th>{{ t.settings.assign_label }}</th>
+                                <th>{{ t.settings.assign_profile }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for a in assignments %}
+                        <tr>
+                            <td class="muted" style="font-family:var(--font-mono);font-size:12px">{{ a.filename }}</td>
+                            <td>{{ a.label or '–' }}</td>
+                            <td><span class="badge badge-user">{{ a.profile_name }}</span></td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+
+                <div class="admin-card-title" style="border-top:1px solid var(--border);padding-top:20px;margin-top:8px">&#128203; {{ t.settings.profiles_title }}</div>
                 <table class="user-table">
                     <thead>
                         <tr>
-                            <th>{{ t.settings.assign_file }}</th>
-                            <th>{{ t.settings.assign_label }}</th>
-                            <th>{{ t.settings.assign_profile }}</th>
+                            <th>{{ t.settings.col_name }}</th>
+                            <th>{{ t.settings.col_desc }}</th>
+                            <th>{{ t.settings.col_source }}</th>
+                            <th>{{ t.settings.col_version }}</th>
+                            <th>{{ t.settings.col_help }}</th>
+                            <th>{{ t.settings.col_action }}</th>
                         </tr>
                     </thead>
                     <tbody>
-                    {% for a in assignments %}
+                    {% for p in profiles %}
                     <tr>
-                        <td class="muted" style="font-family:var(--font-mono);font-size:12px">
-                            {{ a.filename }}
+                        <td><strong>{{ p.name }}</strong></td>
+                        <td class="muted" style="font-size:12px">{{ p.description }}</td>
+                        <td>
+                            {% if p.source == 'builtin' %}
+                            <span class="badge badge-admin">{{ t.settings.builtin }}</span>
+                            {% elif p.source == 'github' %}
+                            <span class="badge" style="color:#f0883e;border-color:#f0883e">GitHub</span>
+                            {% else %}
+                            <span class="badge badge-user">{{ t.settings.local }}</span>
+                            {% endif %}
                         </td>
-                        <td>{{ a.label or '&#8211;' }}</td>
-                        <td><span class="badge badge-user">{{ a.profile_name }}</span></td>
+                        <td class="muted">{{ p.version }}</td>
+                        <td>
+                            {% if p.help_setup %}
+                            <button class="btn-info" onclick="showHelp('{{ p.name }}', `{{ p.help_setup | replace('`', "'") }}`, `{{ p.help_mount | replace('`', "'") }}`, `{{ p.log_path_hint | replace('`', "'") }}`)">
+                                {{ t.settings.info_btn }}
+                            </button>
+                            {% else %}
+                            <span class="muted">&#8211;</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if p.source != 'builtin' %}
+                            <form method="POST" action="/settings/profile/delete/{{ p.id }}"
+                                  onsubmit="return confirm('{{ t.settings.delete_confirm }}')">
+                                <button class="btn-danger">{{ t.settings.delete_btn }}</button>
+                            </form>
+                            {% else %}
+                            <span class="muted">&#8211;</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                     </tbody>
                 </table>
-            </div>
-            {% endif %}
+            </div><!-- /profiles-list -->
         </div>
 
-        <!-- TAB: NEUES PROFIL -->
+        <!-- TAB: CUSTOM PROFILE -->
         <div id="tab-new" class="tab-content admin-card" style="display:none">
-            <div class="admin-card-title">{{ t.settings.new_title }}</div>
+            <div class="admin-card-title">&#10133; Custom Profile</div>
+            <div style="background:var(--bg-dark);border-left:3px solid var(--accent);padding:10px 16px;border-radius:0 4px 4px 0;font-size:12px;color:var(--text-muted);margin-bottom:20px">
+                &#128161; For apps without a GitHub profile. This profile will be stored <strong>locally only</strong> and is not shared to GitHub.
+            </div>
             <div class="add-user-form">
                 <div class="form-row">
                     <div class="form-group">
                         <label>{{ t.settings.new_name }}</label>
-                        <input type="text" id="new-name"
-                               placeholder="{{ t.settings.new_name_hint }}">
+                        <input type="text" id="new-name" placeholder="{{ t.settings.new_name_hint }}">
                     </div>
                     <div class="form-group">
                         <label>{{ t.settings.new_desc }}</label>
-                        <input type="text" id="new-desc"
-                               placeholder="{{ t.settings.new_desc_hint }}">
+                        <input type="text" id="new-desc" placeholder="{{ t.settings.new_desc_hint }}">
                     </div>
                 </div>
                 <div class="form-hint">{{ t.settings.new_keywords_hint }}</div>
@@ -479,39 +410,13 @@ docker-compose up -d radarr</pre>
                 </div>
                 <div class="form-group">
                     <label>{{ t.settings.new_setup }}</label>
-                    <input type="text" id="new-setup"
-                           placeholder="e.g. Settings -> Log Level -> Info">
+                    <textarea id="new-setup" rows="3" placeholder="e.g. Enable logging in Settings → General"></textarea>
                 </div>
                 <div class="form-group">
                     <label>{{ t.settings.new_mount }}</label>
-                    <input type="text" id="new-mount"
-                           placeholder="-v /config/logs:/logs/app">
+                    <textarea id="new-mount" rows="3" placeholder="e.g. - /opt/docker/logs/app:/config/logs"></textarea>
                 </div>
-                <button class="login-btn" onclick="saveProfile()">
-                    {{ t.settings.new_submit }}
-                </button>
-            </div>
-        </div>
-
-
-
-        <!-- TAB: GITHUB -->
-        <div id="tab-github" class="tab-content admin-card" style="display:none; padding:0; overflow:hidden">
-            <div id="github-header" style="padding:16px 24px 12px; border-bottom:1px solid var(--border); background:var(--bg-panel)">
-                <div class="admin-card-title" style="border:none;padding:0;margin-bottom:8px">{{ t.settings.github_title }}</div>
-                <div class="github-hint">
-                    {{ t.settings.github_hint }}
-                    <code>{{ github_user }}/{{ github_repo }}</code>
-                </div>
-                <button class="login-btn" style="width:auto;padding:8px 20px;margin-top:12px"
-                        onclick="loadGithubProfiles()">
-                    {{ t.settings.github_load }}
-                </button>
-            </div>
-            <div id="github-list" style="overflow-y:auto; padding:16px 24px 24px">
-                <div class="muted" style="font-size:13px">
-                    {{ t.settings.github_load }}
-                </div>
+                <button class="login-btn" onclick="saveProfile()">{{ t.settings.new_submit }}</button>
             </div>
         </div>
 
@@ -635,7 +540,7 @@ docker-compose up -d radarr</pre>
         tabEl.style.flexDirection = "column";
         if (el) el.classList.add("active");
         history.replaceState(null, "", "#" + name);
-        if (name === "github") resizeGithubList();
+        if (name === "github" || name === "profiles") resizeGithubList();
         if (name === "notifications") loadNotifications();
     }
 
@@ -652,7 +557,7 @@ docker-compose up -d radarr</pre>
     }
     window.addEventListener("DOMContentLoaded", () => {
         const hash = window.location.hash.replace("#", "");
-        const validTabs = ["quickstart","github","profiles","assign","new","notifications","backup","logfiles"];
+        const validTabs = ["quickstart","github","profiles","new","notifications","backup"];
 
         if (hash && validTabs.includes(hash)) {
             const btn = document.querySelector(`.tab[onclick*="'${hash}'"]`);
@@ -754,14 +659,23 @@ docker-compose up -d radarr</pre>
     }
 
     function resizeGithubList() {
-        const header = document.getElementById("github-header");
-        const list = document.getElementById("github-list");
-        if (!header || !list) return;
         const tabBar = document.querySelector(".tab-bar") || document.querySelector(".settings-tabs");
         const tabBarH = tabBar ? tabBar.offsetHeight : 50;
-        const headerH = header.offsetHeight;
         const navH = 56;
-        list.style.maxHeight = (window.innerHeight - navH - tabBarH - headerH - 20) + "px";
+
+        // GitHub Tab
+        const ghHeader = document.getElementById("github-header");
+        const ghList   = document.getElementById("github-list");
+        if (ghHeader && ghList) {
+            ghList.style.maxHeight = (window.innerHeight - navH - tabBarH - ghHeader.offsetHeight - 20) + "px";
+        }
+
+        // Profiles & Assign Tab
+        const prHeader = document.getElementById("profiles-header");
+        const prList   = document.getElementById("profiles-list");
+        if (prHeader && prList) {
+            prList.style.maxHeight = (window.innerHeight - navH - tabBarH - prHeader.offsetHeight - 20) + "px";
+        }
     }
     window.addEventListener("resize", resizeGithubList);
 

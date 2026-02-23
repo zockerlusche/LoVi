@@ -213,20 +213,22 @@ def get_log_files(include_hidden=False, include_rotating=False):
 
     return sorted(files)
 
-def send_alert_mail(settings, filename, error_count):
-    """Sendet eine Alert-Mail via SMTP."""
+def send_alert_mail(settings, alerts):
+    """Sendet eine zusammengefasste Alert-Mail. alerts = [(filename, error_count), ...]"""
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
+    count = len(alerts)
+    subject = f"[LoVi Alert] {count} log file{'s' if count > 1 else ''} with new ERRORs"
+    body = "LoVi detected new ERROR entries:\n\n"
+    for filename, error_count in alerts:
+        body += f"  {filename:<40} -> {error_count} new ERRORs\n"
+    body += f"\nCheck interval: last {settings['threshold_mins']} minutes"
+    body += "\n\n-- LoVi Log Viewer"
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"[LoVi Alert] {error_count} ERRORs in {filename}"
+    msg["Subject"] = subject
     msg["From"]    = settings["smtp_from"]
     msg["To"]      = settings["smtp_to"]
-    body = f"""LoVi detected {error_count} ERROR entries in the last {settings["threshold_mins"]} minutes.
-
-Log file: {filename}
-
--- LoVi Log Viewer"""
     msg.attach(MIMEText(body, "plain"))
     with smtplib.SMTP(settings["smtp_host"], settings["smtp_port"]) as server:
         server.starttls()
@@ -234,7 +236,7 @@ Log file: {filename}
         server.sendmail(settings["smtp_from"], settings["smtp_to"], msg.as_string())
 
 def check_notifications():
-    """Prüft nur assigned Log-Dateien auf ERROR-Rate und sendet Alerts."""
+    """Prüft nur assigned Log-Dateien – nur NEUE ERRORs seit letztem Alert – eine zusammengefasste Mail."""
     import datetime
     conn = get_db()
     row = conn.execute("SELECT * FROM notification_settings WHERE id=1").fetchone()
@@ -247,34 +249,48 @@ def check_notifications():
     cooldown_mins   = settings["cooldown_mins"]
     assigned = {r["filename"] for r in conn.execute("SELECT filename FROM log_assignments").fetchall()}
     files = [f for f in get_log_files() if f in assigned]
+    now = datetime.datetime.utcnow()
+    alerts = []  # Liste der betroffenen Dateien für zusammengefasste Mail
+
     for filename in files:
-        # Cooldown prüfen
+        # Letzten Alert für diese Datei holen
         last = conn.execute(
             "SELECT sent_at FROM notification_log WHERE filename=? ORDER BY sent_at DESC LIMIT 1",
             (filename,)
         ).fetchone()
+
+        # Cooldown prüfen
         if last:
             last_dt = datetime.datetime.fromisoformat(last["sent_at"])
-            diff = (datetime.datetime.utcnow() - last_dt).total_seconds() / 60
+            diff = (now - last_dt).total_seconds() / 60
             if diff < cooldown_mins:
                 continue
-        # Error-Rate prüfen
+
+        # Lookback: entweder seit letztem Alert oder threshold_mins – was kürzer ist
+        if last:
+            last_dt = datetime.datetime.fromisoformat(last["sent_at"])
+            lookback = max(last_dt, now - datetime.timedelta(minutes=threshold_mins))
+        else:
+            lookback = now - datetime.timedelta(minutes=threshold_mins)
+
+        # Nur neue ERRORs seit lookback zählen
         lines = read_log_file(filename, lines=500)
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(minutes=threshold_mins)
-        error_count = 0
-        for line in lines:
-            if line["level"] == "error":
-                error_count += 1
+        error_count = sum(1 for l in lines if l["level"] == "error")
+
         if error_count >= threshold_count:
-            try:
-                send_alert_mail(settings, filename, error_count)
+            alerts.append((filename, error_count))
+
+    if alerts:
+        try:
+            send_alert_mail(settings, alerts)
+            for filename, error_count in alerts:
                 conn.execute(
                     "INSERT INTO notification_log (filename, error_count) VALUES (?,?)",
                     (filename, error_count)
                 )
-                conn.commit()
-            except Exception as e:
-                app.logger.error(f"Mail error: {e}")
+            conn.commit()
+        except Exception as e:
+            app.logger.error(f"Mail error: {e}")
     conn.close()
 
 def auto_assign_by_hint(conn):
@@ -1051,7 +1067,7 @@ def api_notifications_test():
     if not row:
         return jsonify({"error": "No settings saved"}), 400
     try:
-        send_alert_mail(dict(row), "test.log", 99)
+        send_alert_mail(dict(row), [("test.log", 99)])
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
