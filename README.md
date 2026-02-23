@@ -22,15 +22,13 @@ LoVi works with **any application that writes log files** – not just media too
 
 - **📋 Centralized Log Dashboard** – All container logs in one place, live-reloadable
 - **🎨 Color-coded Log Levels** – ERROR, WARNING, INFO, DEBUG instantly recognizable
-- **🔍 Search & Filter** – Find specific events across all logs in seconds
+- **🔍 Search** – Find specific events across all logs in seconds
 - **📦 Profile System** – Parser profiles per application define how logs are interpreted
 - **🌐 GitHub Profile Integration** – Download community-maintained profiles with one click
-- **🤖 Auto-Detect** – LoVi automatically suggests the best matching profile for each log file
 - **⚡ Auto-Assign** – Profiles get assigned automatically based on file name hints
 - **🗂️ Recursive Log Scan** – Detects log files in subdirectories (e.g. `/logs/radarr/radarr.txt`)
 - **👤 User Management** – Login system with admin and regular user roles
 - **🌍 Multi-Language** – German & English UI
-- **📊 Status Bar** – Storage usage and system health at a glance
 - **🐳 Docker-native** – Runs as a container, no installation hassle
 
 ---
@@ -56,6 +54,8 @@ LoVi ships with ready-to-use parsing profiles for:
 | 🧪 Home Assistant | Home Automation |
 | 🧪 Syslog | System Logs |
 | 🧪 Python | Python App Standard Logging |
+
+More coming soon...
 
 Additional community profiles are available via **GitHub integration**.
 
@@ -112,9 +112,8 @@ LoVi guides you step by step:
 2. **GitHub** – Browse & install community profiles
 3. **Profiles** – Manage your local profiles
 4. **Assign** – Manually assign profiles to log files
-5. **Auto-Detect** – Let LoVi suggest profiles automatically
-6. **New Profile** – Create a custom profile for any application
-7. **Log Files** – Manage which logs appear on the dashboard
+5. **New Profile** – Create a custom profile for any application
+6. **Log Files** – Manage which logs appear on the dashboard
 
 ---
 
@@ -128,7 +127,7 @@ Each profile contains:
 - Step-by-step setup instructions with docker-compose snippets
 - Version compatibility notes
 
-**Want to contribute?** Submit your own profile via Pull Request!
+**Want to contribute?** Submit your own profile via Pull Request! 🧪
 
 ---
 
